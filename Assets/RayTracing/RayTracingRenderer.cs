@@ -10,9 +10,12 @@ public class RayTracingRenderer : MonoBehaviour {
     public const int kWidth = 1024;
     public const int kHeight = 728;
 
+    public int MaxBounceCount = 5;
+
 	// Use this for initialization
 	void Start () {
         Tex = new Texture2D(kWidth, kHeight);
+        Render();
     }
 	
 	// Update is called once per frame
@@ -42,21 +45,45 @@ public class RayTracingRenderer : MonoBehaviour {
                 var rayEndPoint = corner00 + (corner10 - corner00) * ((float)wi / kWidth) + (corner01 - corner00) * ((float)hi / kHeight);
                 camRay.direction = Vector3.Normalize(rayEndPoint - camOrigin);
 
-                var color = (camRay.direction + Vector3.one) * 0.5f;
-
-                Color col = new Color(color.x, color.y, color.z);
-                RaycastHit hitInfo;
-                if (Physics.Raycast(camRay, out hitInfo))
-                {
-                    var normal = (hitInfo.normal + Vector3.one) * 0.5f;
-                    var material = hitInfo.collider.GetComponent<RayTracingMaterialBase>();
-                    col = material.Albedo;
-                }
+                var col = ComputeColor(camRay);
                 pixels[kWidth * hi + wi] = col;
             }
         }
 
         Tex.SetPixels(pixels);
         Tex.Apply();
+    }
+
+    private Vector3 RandomVector()
+    {
+        Vector3 vec;
+        do
+        {
+            vec = new Vector3(Random.Range(-1.0f, 1.0f), Random.Range(-1.0f, 1.0f), Random.Range(-1.0f, 1.0f));
+        }
+        while (vec.magnitude >= 1.0f);
+        return vec;
+    }
+
+    private Color ComputeColor(Ray ray, int traverseDepth = 0)
+    {
+        Color col;
+        RaycastHit hitInfo;
+        if (Physics.Raycast(ray, out hitInfo))
+        {
+            var normal = (hitInfo.normal + Vector3.one);
+            var material = hitInfo.collider.GetComponent<RayTracingMaterialBase>();
+            var diffuseRay = new Ray(hitInfo.point, hitInfo.point + hitInfo.normal + 0.5f * RandomVector());
+            var addColor = traverseDepth > MaxBounceCount ? Color.black : ComputeColor(diffuseRay, ++traverseDepth); 
+            col = 0.5f * (material.Albedo + addColor);
+        }
+        else
+        {
+            var unitDirection = ray.direction.normalized;
+            float t = 0.5f * (unitDirection.y + 1.0f);
+            return Color.Lerp(Color.white, new Color(0.5f, 0.7f, 1.0f), t);
+        }
+
+        return col;
     }
 }
